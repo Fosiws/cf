@@ -1,0 +1,1081 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>乘法口诀实时答题挑战</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        .fade-in {
+            animation: fadeIn 0.3s ease-in;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .pulse {
+            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: .5;
+            }
+        }
+
+        .shake {
+            animation: shake 0.5s;
+        }
+
+        @keyframes shake {
+
+            0%,
+            100% {
+                transform: translateX(0);
+            }
+
+            25% {
+                transform: translateX(-5px);
+            }
+
+            75% {
+                transform: translateX(5px);
+            }
+        }
+
+        .correct-answer {
+            animation: correctAnswer 0.5s;
+        }
+
+        @keyframes correctAnswer {
+            0% {
+                background-color: #10b981;
+            }
+
+            100% {
+                background-color: transparent;
+            }
+        }
+
+        .wrong-answer {
+            animation: wrongAnswer 0.5s;
+        }
+
+        @keyframes wrongAnswer {
+            0% {
+                background-color: #ef4444;
+            }
+
+            100% {
+                background-color: transparent;
+            }
+        }
+
+        /**
+         * 数字键盘按钮样式
+         */
+        .numpad-btn {
+            transition: all 0.15s ease;
+        }
+
+        .numpad-btn:active {
+            transform: scale(0.95);
+        }
+    </style>
+</head>
+
+<body class="bg-gradient-to-br from-blue-50 to-indigo-100 min-h-screen">
+    <!-- 应用容器 -->
+    <div id="app" class="container mx-auto px-4 py-8 max-w-7xl">
+
+        <!-- 欢迎页面 -->
+        <div id="welcomePage" class="min-h-screen py-8">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 max-w-6xl mx-auto">
+                <!-- 左侧：开始答题区域 -->
+                <div class="flex items-center justify-center">
+                    <div class="bg-white rounded-2xl shadow-2xl p-8 md:p-12 max-w-md w-full fade-in">
+                        <div class="text-center mb-8">
+                            <div class="text-6xl mb-4">🎯</div>
+                            <h1 class="text-3xl md:text-4xl font-bold text-gray-800 mb-2">乘法口诀挑战</h1>
+                            <p class="text-gray-600">小学二年级数学练习</p>
+                        </div>
+
+                        <div class="space-y-6">
+                            <div>
+                                <label for="userName" class="block text-sm font-medium text-gray-700 mb-2">
+                                    请输入你的姓名
+                                </label>
+                                <input type="text" id="userName" maxlength="50" placeholder="例如：张三"
+                                    class="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none transition text-lg">
+                                <p id="nameError" class="text-red-500 text-sm mt-2 hidden"></p>
+                            </div>
+
+                            <button id="startButton" onclick="startQuiz()"
+                                class="w-full bg-gradient-to-r from-indigo-500 to-purple-600 text-white font-bold py-4 px-6 rounded-lg hover:from-indigo-600 hover:to-purple-700 transition transform hover:scale-105 shadow-lg text-lg">
+                                开始答题 🚀
+                            </button>
+
+                            <div class="bg-blue-50 rounded-lg p-4 text-sm text-gray-600">
+                                <h3 class="font-bold text-gray-800 mb-2">📋 答题规则：</h3>
+                                <ul class="space-y-1">
+                                    <li>• 共 10 道乘法口诀题</li>
+                                    <li>• 答错后不可修改</li>
+                                    <li>• 每人只能答题一次</li>
+                                    <li>• 按正确率和用时排名</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 右侧：排行榜区域 -->
+                <div class="flex items-center justify-center">
+                    <div class="bg-white rounded-2xl shadow-2xl p-6 md:p-8 max-w-md w-full fade-in">
+                        <h2 class="text-xl font-bold text-gray-800 mb-4 flex items-center justify-center">
+                            <span class="mr-2 text-2xl">🏆</span> 排行榜
+                        </h2>
+                        <div id="welcomeLeaderboard" class="space-y-2 max-h-96 overflow-y-auto">
+                            <div class="text-center text-gray-400 py-8">
+                                <div class="text-4xl mb-2">📊</div>
+                                <p>加载中...</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 答题页面 -->
+        <div id="quizPage" class="hidden">
+            <!-- 顶部栏 -->
+            <div class="bg-white rounded-xl shadow-lg p-4 mb-6 flex justify-between items-center">
+                <h1 class="text-xl md:text-2xl font-bold text-gray-800">🎯 乘法口诀挑战</h1>
+                <div class="flex items-center space-x-2 bg-indigo-100 px-4 py-2 rounded-lg">
+                    <span class="text-gray-600">⏱️</span>
+                    <span id="totalTimer" class="text-2xl font-bold text-indigo-600">0.0</span>
+                    <span class="text-gray-600 text-sm">秒</span>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- 答题区域 -->
+                <div class="lg:col-span-2">
+                    <div class="bg-white rounded-xl shadow-lg p-6 md:p-8">
+                        <!-- 进度条 -->
+                        <div class="mb-6">
+                            <div class="flex justify-between items-center mb-2">
+                                <span class="text-gray-600 font-medium">答题进度</span>
+                                <span id="progressText" class="text-indigo-600 font-bold">第 1 / 10 题</span>
+                            </div>
+                            <div class="w-full bg-gray-200 rounded-full h-3">
+                                <div id="progressBar"
+                                    class="bg-gradient-to-r from-indigo-500 to-purple-600 h-3 rounded-full transition-all duration-300"
+                                    style="width: 10%"></div>
+                            </div>
+                        </div>
+
+                        <!-- 题目显示 -->
+                        <div id="questionArea" class="text-center py-8">
+                            <div class="text-6xl md:text-8xl font-bold text-gray-800 mb-8">
+                                <span id="multiplier1">1</span>
+                                <span class="text-indigo-600">×</span>
+                                <span id="multiplier2">1</span>
+                                <span class="text-indigo-600">=</span>
+                                <span id="answerDisplay" class="text-indigo-600">?</span>
+                            </div>
+
+                            <!-- 隐藏的输入框用于存储实际值 -->
+                            <input type="hidden" id="answerInput" value="">
+
+                            <!-- 数字键盘 -->
+                            <div class="max-w-xs mx-auto">
+                                <div class="grid grid-cols-3 gap-3 mb-4">
+                                    <button onclick="inputNumber(1)"
+                                        class="numpad-btn bg-white border-2 border-gray-200 hover:border-indigo-400 hover:bg-indigo-50 text-2xl font-bold py-4 rounded-xl shadow-sm">1</button>
+                                    <button onclick="inputNumber(2)"
+                                        class="numpad-btn bg-white border-2 border-gray-200 hover:border-indigo-400 hover:bg-indigo-50 text-2xl font-bold py-4 rounded-xl shadow-sm">2</button>
+                                    <button onclick="inputNumber(3)"
+                                        class="numpad-btn bg-white border-2 border-gray-200 hover:border-indigo-400 hover:bg-indigo-50 text-2xl font-bold py-4 rounded-xl shadow-sm">3</button>
+                                    <button onclick="inputNumber(4)"
+                                        class="numpad-btn bg-white border-2 border-gray-200 hover:border-indigo-400 hover:bg-indigo-50 text-2xl font-bold py-4 rounded-xl shadow-sm">4</button>
+                                    <button onclick="inputNumber(5)"
+                                        class="numpad-btn bg-white border-2 border-gray-200 hover:border-indigo-400 hover:bg-indigo-50 text-2xl font-bold py-4 rounded-xl shadow-sm">5</button>
+                                    <button onclick="inputNumber(6)"
+                                        class="numpad-btn bg-white border-2 border-gray-200 hover:border-indigo-400 hover:bg-indigo-50 text-2xl font-bold py-4 rounded-xl shadow-sm">6</button>
+                                    <button onclick="inputNumber(7)"
+                                        class="numpad-btn bg-white border-2 border-gray-200 hover:border-indigo-400 hover:bg-indigo-50 text-2xl font-bold py-4 rounded-xl shadow-sm">7</button>
+                                    <button onclick="inputNumber(8)"
+                                        class="numpad-btn bg-white border-2 border-gray-200 hover:border-indigo-400 hover:bg-indigo-50 text-2xl font-bold py-4 rounded-xl shadow-sm">8</button>
+                                    <button onclick="inputNumber(9)"
+                                        class="numpad-btn bg-white border-2 border-gray-200 hover:border-indigo-400 hover:bg-indigo-50 text-2xl font-bold py-4 rounded-xl shadow-sm">9</button>
+                                    <button onclick="clearAnswer()"
+                                        class="numpad-btn bg-red-100 border-2 border-red-200 hover:bg-red-200 text-xl font-bold py-4 rounded-xl shadow-sm text-red-600">清除</button>
+                                    <button onclick="inputNumber(0)"
+                                        class="numpad-btn bg-white border-2 border-gray-200 hover:border-indigo-400 hover:bg-indigo-50 text-2xl font-bold py-4 rounded-xl shadow-sm">0</button>
+                                    <button onclick="submitAnswer()" id="submitBtn"
+                                        class="numpad-btn bg-gradient-to-r from-green-500 to-emerald-600 border-2 border-green-500 hover:from-green-600 hover:to-emerald-700 text-xl font-bold py-4 rounded-xl shadow-sm text-white">提交</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 本题用时 -->
+                        <div class="mt-6 text-center">
+                            <div class="inline-flex items-center space-x-2 bg-gray-100 px-4 py-2 rounded-lg">
+                                <span class="text-gray-600">本题用时：</span>
+                                <span id="questionTimer" class="text-xl font-bold text-indigo-600">0.0</span>
+                                <span class="text-gray-600 text-sm">秒</span>
+                            </div>
+                        </div>
+
+                        <!-- 答题反馈 -->
+                        <div id="feedback" class="hidden mt-6 text-center py-4 rounded-lg fade-in">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 排行榜 -->
+                <div class="lg:col-span-1">
+                    <div class="bg-white rounded-xl shadow-lg p-6 sticky top-6">
+                        <h2 class="text-xl font-bold text-gray-800 mb-4 flex items-center">
+                            <span class="mr-2">🏆</span> 排行榜
+                        </h2>
+                        <div id="leaderboard" class="space-y-2 max-h-96 overflow-y-auto">
+                            <div class="text-center text-gray-400 py-8">
+                                <div class="text-4xl mb-2">📊</div>
+                                <p>暂无数据</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 结果页面 -->
+        <div id="resultPage" class="hidden">
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- 成绩展示 -->
+                <div class="lg:col-span-2 space-y-6">
+                    <!-- 成绩卡片 -->
+                    <div class="bg-white rounded-xl shadow-lg p-6 md:p-8 fade-in">
+                        <div class="text-center mb-6">
+                            <div id="resultEmoji" class="text-6xl mb-4">🎉</div>
+                            <h1 class="text-3xl font-bold text-gray-800 mb-2">答题完成！</h1>
+                            <p id="resultName" class="text-gray-600 text-lg"></p>
+                        </div>
+
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                            <div class="bg-indigo-50 rounded-lg p-4 text-center">
+                                <div class="text-3xl font-bold text-indigo-600" id="resultCorrect">0</div>
+                                <div class="text-gray-600 text-sm mt-1">答对题数</div>
+                            </div>
+                            <div class="bg-red-50 rounded-lg p-4 text-center">
+                                <div class="text-3xl font-bold text-red-600" id="resultWrong">0</div>
+                                <div class="text-gray-600 text-sm mt-1">答错题数</div>
+                            </div>
+                            <div class="bg-green-50 rounded-lg p-4 text-center">
+                                <div class="text-3xl font-bold text-green-600" id="resultAccuracy">0%</div>
+                                <div class="text-gray-600 text-sm mt-1">正确率</div>
+                            </div>
+                            <div class="bg-purple-50 rounded-lg p-4 text-center">
+                                <div class="text-3xl font-bold text-purple-600" id="resultTime">0.0s</div>
+                                <div class="text-gray-600 text-sm mt-1">总用时</div>
+                            </div>
+                        </div>
+
+                        <div
+                            class="bg-gradient-to-r from-indigo-500 to-purple-600 rounded-lg p-6 text-center text-white">
+                            <div class="text-lg mb-1">你的排名</div>
+                            <div class="text-5xl font-bold" id="resultRank">-</div>
+                            <div class="text-lg mt-1">名</div>
+                        </div>
+                    </div>
+
+                    <!-- 答题详情 -->
+                    <div class="bg-white rounded-xl shadow-lg p-6 md:p-8">
+                        <h2 class="text-xl font-bold text-gray-800 mb-4 flex items-center">
+                            <span class="mr-2">📝</span> 答题详情
+                        </h2>
+                        <div id="answerDetails" class="space-y-3">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 排行榜 -->
+                <div class="lg:col-span-1">
+                    <div class="bg-white rounded-xl shadow-lg p-6 sticky top-6">
+                        <h2 class="text-xl font-bold text-gray-800 mb-4 flex items-center">
+                            <span class="mr-2">🏆</span> 排行榜
+                        </h2>
+                        <div id="finalLeaderboard" class="space-y-2 max-h-96 overflow-y-auto">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ============================================
+        // Supabase 配置
+        // 请替换为你自己的 Supabase 项目配置
+        // ============================================
+        const SUPABASE_URL = 'https://yapehlhblpzcrqzmecjb.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlhcGVobGhibHB6Y3Jxem1lY2piIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMwMDQ4NDEsImV4cCI6MjA4ODU4MDg0MX0.TmQfFLKaAfHpaDeIUYnAPsvgX6zzQxgFqvl4UAsjCv8';
+
+        // 测试模式：设置为true时跳过数据库验证，直接进入答题
+        const TEST_MODE = true;
+
+        // 初始化 Supabase 客户端（使用不同的变量名避免冲突）
+        let supabaseClient = null;
+        try {
+            if (typeof window.supabase !== 'undefined' && SUPABASE_URL && SUPABASE_URL !== 'YOUR_SUPABASE_URL') {
+                supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+                console.log('Supabase 客户端初始化成功');
+            } else {
+                console.log('Supabase 未配置或SDK未加载，将使用测试模式');
+            }
+        } catch (error) {
+            console.warn('Supabase 初始化失败，将使用测试模式:', error);
+        }
+
+        // ============================================
+        // 全局状态管理
+        // ============================================
+        let currentUser = null;
+        let questions = [];
+        let currentQuestionIndex = 0;
+        let answers = [];
+        let totalStartTime = null;
+        let questionStartTime = null;
+
+        // ============================================
+        // 工具函数
+        // ============================================
+
+        /**
+         * 数组随机排序
+         * @param {Array} array - 待排序数组
+         * @returns {Array} - 随机排序后的数组
+         */
+        function shuffleArray(array) {
+            const newArray = [...array];
+            for (let i = newArray.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [newArray[i], newArray[j]] = [newArray[j], newArray[i]];
+            }
+            return newArray;
+        }
+
+        /**
+         * 生成10道不重复的乘法题
+         * @returns {Array} - 题目数组
+         */
+        function generateQuestions() {
+            const allQuestions = [];
+
+            for (let i = 1; i <= 9; i++) {
+                for (let j = i; j <= 9; j++) {
+                    allQuestions.push({
+                        multiplier1: i,
+                        multiplier2: j,
+                        answer: i * j
+                    });
+                }
+            }
+
+            const shuffled = shuffleArray(allQuestions);
+            return shuffled.slice(0, 10);
+        }
+
+        /**
+         * 显示错误消息
+         * @param {string} message - 错误消息
+         */
+        function showError(message) {
+            const errorEl = document.getElementById('nameError');
+            errorEl.textContent = message;
+            errorEl.classList.remove('hidden');
+            document.getElementById('userName').classList.add('border-red-500', 'shake');
+            setTimeout(() => {
+                document.getElementById('userName').classList.remove('shake');
+            }, 500);
+        }
+
+        /**
+         * 隐藏错误消息
+         */
+        function hideError() {
+            const errorEl = document.getElementById('nameError');
+            errorEl.classList.add('hidden');
+            document.getElementById('userName').classList.remove('border-red-500');
+        }
+
+        // ============================================
+        // 页面切换函数
+        // ============================================
+
+        /**
+         * 显示欢迎页面
+         */
+        function showWelcomePage() {
+            document.getElementById('welcomePage').classList.remove('hidden');
+            document.getElementById('quizPage').classList.add('hidden');
+            document.getElementById('resultPage').classList.add('hidden');
+        }
+
+        /**
+         * 显示答题页面
+         */
+        function showQuizPage() {
+            document.getElementById('welcomePage').classList.add('hidden');
+            document.getElementById('quizPage').classList.remove('hidden');
+            document.getElementById('resultPage').classList.add('hidden');
+        }
+
+        /**
+         * 显示结果页面
+         */
+        function showResultPage() {
+            document.getElementById('welcomePage').classList.add('hidden');
+            document.getElementById('quizPage').classList.add('hidden');
+            document.getElementById('resultPage').classList.remove('hidden');
+        }
+
+        // ============================================
+        // 计时器函数
+        // ============================================
+
+        /**
+         * 启动总计时器
+         */
+        function startTotalTimer() {
+            totalStartTime = Date.now();
+            updateTotalTimer();
+        }
+
+        /**
+         * 更新总计时器显示
+         */
+        function updateTotalTimer() {
+            if (totalStartTime) {
+                const elapsed = (Date.now() - totalStartTime) / 1000;
+                document.getElementById('totalTimer').textContent = elapsed.toFixed(1);
+                requestAnimationFrame(updateTotalTimer);
+            }
+        }
+
+        /**
+         * 停止总计时器
+         */
+        function stopTotalTimer() {
+            totalStartTime = null;
+        }
+
+        /**
+         * 获取总用时
+         * @returns {number} - 总用时（秒）
+         */
+        function getTotalTime() {
+            if (totalStartTime) {
+                return ((Date.now() - totalStartTime) / 1000);
+            }
+            return 0;
+        }
+
+        /**
+         * 启动单题计时器
+         */
+        function startQuestionTimer() {
+            questionStartTime = Date.now();
+            updateQuestionTimer();
+        }
+
+        /**
+         * 更新单题计时器显示
+         */
+        function updateQuestionTimer() {
+            if (questionStartTime) {
+                const elapsed = (Date.now() - questionStartTime) / 1000;
+                document.getElementById('questionTimer').textContent = elapsed.toFixed(1);
+                requestAnimationFrame(updateQuestionTimer);
+            }
+        }
+
+        /**
+         * 停止单题计时器
+         */
+        function stopQuestionTimer() {
+            questionStartTime = null;
+        }
+
+        /**
+         * 获取单题用时
+         * @returns {number} - 单题用时（秒）
+         */
+        function getQuestionTime() {
+            if (questionStartTime) {
+                return ((Date.now() - questionStartTime) / 1000);
+            }
+            return 0;
+        }
+
+        // ============================================
+        // 排行榜函数
+        // ============================================
+
+        /**
+         * 加载排行榜数据
+         */
+        async function loadLeaderboard() {
+            try {
+                const { data, error } = await supabaseClient
+                    .from('leaderboard_view')
+                    .select('*')
+                    .order('rank_position', { ascending: true })
+                    .limit(20);
+
+                if (error) throw error;
+
+                renderLeaderboard(data, 'leaderboard');
+                renderLeaderboard(data, 'finalLeaderboard');
+            } catch (error) {
+                console.error('加载排行榜失败:', error);
+            }
+        }
+
+        /**
+         * 渲染排行榜
+         * @param {Array} data - 排行榜数据
+         * @param {string} containerId - 容器ID
+         */
+        function renderLeaderboard(data, containerId) {
+            const container = document.getElementById(containerId);
+
+            if (!data || data.length === 0) {
+                container.innerHTML = `
+                    <div class="text-center text-gray-400 py-8">
+                        <div class="text-4xl mb-2">📊</div>
+                        <p>暂无数据</p>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = data.map((item, index) => {
+                const rankEmoji = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `${item.rank_position}.`;
+                const isCurrentUser = currentUser && item.name === currentUser.name;
+
+                return `
+                    <div class="flex items-center justify-between p-3 rounded-lg ${isCurrentUser ? 'bg-indigo-100 border-2 border-indigo-500' : 'bg-gray-50'} transition hover:bg-gray-100">
+                        <div class="flex items-center space-x-3">
+                            <span class="text-xl font-bold ${index < 3 ? '' : 'text-gray-600'}">${rankEmoji}</span>
+                            <span class="font-medium ${isCurrentUser ? 'text-indigo-700' : 'text-gray-800'}">${item.name}</span>
+                        </div>
+                        <div class="text-right">
+                            <div class="font-bold ${isCurrentUser ? 'text-indigo-600' : 'text-gray-800'}">${item.accuracy}%</div>
+                            <div class="text-sm text-gray-500">${item.total_time}s</div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // ============================================
+        // 用户注册函数
+        // ============================================
+
+        /**
+         * 注册用户
+         * @param {string} name - 用户姓名
+         * @returns {Object} - 用户对象
+         */
+        async function registerUser(name) {
+            const { data, error } = await supabaseClient
+                .from('users')
+                .insert([{ name: name.trim() }])
+                .select()
+                .single();
+
+            if (error) {
+                if (error.code === '23505') {
+                    throw new Error('该姓名已被使用，每人只能答题一次哦！');
+                }
+                throw error;
+            }
+
+            return data;
+        }
+
+        // ============================================
+        // 答题逻辑函数
+        // ============================================
+
+        /**
+         * 开始答题
+         */
+        async function startQuiz() {
+            console.log('startQuiz 函数被调用');
+            hideError();
+
+            const nameInput = document.getElementById('userName');
+            const name = nameInput.value.trim();
+            console.log('输入的姓名:', name);
+
+            if (!name) {
+                showError('请输入你的姓名！');
+                return;
+            }
+
+            if (name.length > 50) {
+                showError('姓名不能超过50个字符！');
+                return;
+            }
+
+            try {
+                console.log('开始处理...');
+                document.getElementById('startButton').disabled = true;
+                document.getElementById('startButton').textContent = '正在注册...';
+
+                // 测试模式：跳过数据库验证
+                if (TEST_MODE || !supabaseClient) {
+                    console.log('测试模式：跳过数据库验证');
+                    currentUser = { id: 'test-' + Date.now(), name: name };
+                } else {
+                    // 正常模式：注册用户
+                    currentUser = await registerUser(name);
+                }
+
+                console.log('生成题目...');
+                questions = generateQuestions();
+                currentQuestionIndex = 0;
+                answers = [];
+                console.log('题目已生成:', questions.length);
+
+                console.log('切换到答题页面...');
+                showQuizPage();
+                displayQuestion();
+                startTotalTimer();
+
+                // 加载排行榜
+                if (supabaseClient && !TEST_MODE) {
+                    loadLeaderboard();
+                } else {
+                    // 测试模式下显示提示信息
+                    const container = document.getElementById('leaderboard');
+                    container.innerHTML = `
+                        <div class="text-center text-gray-400 py-8">
+                            <div class="text-4xl mb-2">🧪</div>
+                            <p class="font-medium">测试模式</p>
+                            <p class="text-sm mt-1">答题结束后查看成绩</p>
+                        </div>
+                    `;
+                }
+
+                console.log('答题页面初始化完成');
+
+            } catch (error) {
+                console.error('答题启动失败:', error);
+                showError(error.message || '网络连接失败，请检查网络后重试');
+                document.getElementById('startButton').disabled = false;
+                document.getElementById('startButton').textContent = '开始答题 🚀';
+            }
+        }
+
+        /**
+         * 显示当前题目
+         */
+        function displayQuestion() {
+            const question = questions[currentQuestionIndex];
+
+            document.getElementById('multiplier1').textContent = question.multiplier1;
+            document.getElementById('multiplier2').textContent = question.multiplier2;
+
+            const answerInput = document.getElementById('answerInput');
+            answerInput.value = '';
+
+            const answerDisplay = document.getElementById('answerDisplay');
+            answerDisplay.textContent = '?';
+            answerDisplay.classList.remove('correct-answer', 'wrong-answer');
+
+            const submitBtn = document.getElementById('submitBtn');
+            submitBtn.disabled = false;
+
+            document.getElementById('feedback').classList.add('hidden');
+
+            document.getElementById('progressText').textContent = `第 ${currentQuestionIndex + 1} / 10 题`;
+            document.getElementById('progressBar').style.width = `${((currentQuestionIndex + 1) / 10) * 100}%`;
+
+            startQuestionTimer();
+        }
+
+        /**
+         * 数字键盘输入数字
+         * @param {number} num - 输入的数字(0-9)
+         */
+        function inputNumber(num) {
+            const answerInput = document.getElementById('answerInput');
+            const answerDisplay = document.getElementById('answerDisplay');
+            const currentValue = answerInput.value;
+
+            if (currentValue.length < 3) {
+                answerInput.value = currentValue + num;
+                answerDisplay.textContent = answerInput.value || '?';
+            }
+        }
+
+        /**
+         * 清除答案
+         */
+        function clearAnswer() {
+            const answerInput = document.getElementById('answerInput');
+            const answerDisplay = document.getElementById('answerDisplay');
+            answerInput.value = '';
+            answerDisplay.textContent = '?';
+        }
+
+        /**
+         * 处理键盘事件
+         * @param {Event} event - 键盘事件
+         */
+        function handleKeyPress(event) {
+            if (event.key === 'Enter') {
+                submitAnswer();
+            }
+        }
+
+        /**
+         * 提交答案
+         */
+        async function submitAnswer() {
+            const answerInput = document.getElementById('answerInput');
+            const userAnswer = answerInput.value.trim();
+
+            if (!userAnswer) {
+                const answerDisplay = document.getElementById('answerDisplay');
+                answerDisplay.classList.add('shake');
+                setTimeout(() => answerDisplay.classList.remove('shake'), 500);
+                return;
+            }
+
+            const question = questions[currentQuestionIndex];
+            const timeSpent = getQuestionTime();
+            const isCorrect = parseInt(userAnswer) === question.answer;
+
+            answers.push({
+                multiplier1: question.multiplier1,
+                multiplier2: question.multiplier2,
+                userAnswer: parseInt(userAnswer),
+                correctAnswer: question.answer,
+                timeSpent: timeSpent,
+                isCorrect: isCorrect
+            });
+
+            showFeedback(isCorrect, question.answer);
+
+            stopQuestionTimer();
+
+            currentQuestionIndex++;
+
+            if (currentQuestionIndex < 10) {
+                setTimeout(() => {
+                    displayQuestion();
+                }, 1500);
+            } else {
+                setTimeout(() => {
+                    finishQuiz();
+                }, 1500);
+            }
+        }
+
+        /**
+         * 显示答题反馈
+         * @param {boolean} isCorrect - 是否正确
+         * @param {number} correctAnswer - 正确答案
+         */
+        function showFeedback(isCorrect, correctAnswer) {
+            const feedback = document.getElementById('feedback');
+            const answerDisplay = document.getElementById('answerDisplay');
+
+            feedback.classList.remove('hidden');
+
+            if (isCorrect) {
+                feedback.className = 'mt-6 text-center py-4 rounded-lg fade-in bg-green-100 text-green-800';
+                feedback.innerHTML = `
+                    <div class="text-4xl mb-2">✅</div>
+                    <div class="text-xl font-bold">回答正确！</div>
+                `;
+                answerDisplay.classList.add('correct-answer');
+            } else {
+                feedback.className = 'mt-6 text-center py-4 rounded-lg fade-in bg-red-100 text-red-800';
+                feedback.innerHTML = `
+                    <div class="text-4xl mb-2">❌</div>
+                    <div class="text-xl font-bold">回答错误</div>
+                    <div class="text-lg mt-1">正确答案是：${correctAnswer}</div>
+                `;
+                answerDisplay.classList.add('wrong-answer');
+            }
+
+            document.getElementById('submitBtn').disabled = true;
+        }
+
+        /**
+         * 完成答题
+         */
+        async function finishQuiz() {
+            stopTotalTimer();
+            const totalTime = getTotalTime();
+            const correctCount = answers.filter(a => a.isCorrect).length;
+
+            try {
+                // 测试模式：跳过数据库保存，但显示当前用户成绩
+                if (TEST_MODE || !supabaseClient) {
+                    console.log('测试模式：跳过数据库保存');
+                    showResultPage();
+                    displayResults(correctCount, totalTime, 1);
+
+                    // 在测试模式下显示当前用户的成绩
+                    const testData = [{
+                        id: currentUser.id,
+                        name: currentUser.name,
+                        correct_count: correctCount,
+                        total_count: 10,
+                        accuracy: (correctCount / 10 * 100).toFixed(1),
+                        total_time: totalTime,
+                        created_at: new Date().toISOString(),
+                        rank_position: 1
+                    }];
+                    renderLeaderboard(testData, 'finalLeaderboard');
+                    return;
+                }
+
+                const { data: record, error: recordError } = await supabaseClient
+                    .from('quiz_records')
+                    .insert([{
+                        user_id: currentUser.id,
+                        total_time: totalTime,
+                        correct_count: correctCount
+                    }])
+                    .select()
+                    .single();
+
+                if (recordError) throw recordError;
+
+                const answerDetails = answers.map((a, i) => ({
+                    record_id: record.id,
+                    question_number: i + 1,
+                    multiplier1: a.multiplier1,
+                    multiplier2: a.multiplier2,
+                    user_answer: a.userAnswer,
+                    correct_answer: a.correctAnswer,
+                    time_spent: a.timeSpent,
+                    is_correct: a.isCorrect
+                }));
+
+                const { error: detailsError } = await supabaseClient
+                    .from('answer_details')
+                    .insert(answerDetails);
+
+                if (detailsError) throw detailsError;
+
+                await loadLeaderboard();
+
+                const rank = await getUserRank(currentUser.id);
+
+                showResultPage();
+                displayResults(correctCount, totalTime, rank);
+
+            } catch (error) {
+                console.error('提交答题结果失败:', error);
+                alert('提交失败，请重试！');
+            }
+        }
+
+        /**
+         * 获取用户排名
+         * @param {string} userId - 用户ID
+         * @returns {number} - 排名
+         */
+        async function getUserRank(userId) {
+            try {
+                const { data, error } = await supabaseClient
+                    .rpc('get_user_rank', { p_user_id: userId });
+
+                if (error) throw error;
+                return data;
+            } catch (error) {
+                console.error('获取排名失败:', error);
+                return '-';
+            }
+        }
+
+        /**
+         * 显示答题结果
+         * @param {number} correctCount - 正确题数
+         * @param {number} totalTime - 总用时
+         * @param {number} rank - 排名
+         */
+        function displayResults(correctCount, totalTime, rank) {
+            const wrongCount = 10 - correctCount;
+            const accuracy = (correctCount / 10 * 100).toFixed(1);
+
+            document.getElementById('resultName').textContent = currentUser.name;
+            document.getElementById('resultCorrect').textContent = correctCount;
+            document.getElementById('resultWrong').textContent = wrongCount;
+            document.getElementById('resultAccuracy').textContent = `${accuracy}%`;
+            document.getElementById('resultTime').textContent = `${totalTime.toFixed(1)}s`;
+            document.getElementById('resultRank').textContent = rank;
+
+            if (correctCount === 10) {
+                document.getElementById('resultEmoji').textContent = '🏆';
+            } else if (correctCount >= 8) {
+                document.getElementById('resultEmoji').textContent = '🎉';
+            } else if (correctCount >= 6) {
+                document.getElementById('resultEmoji').textContent = '👍';
+            } else {
+                document.getElementById('resultEmoji').textContent = '💪';
+            }
+
+            const detailsContainer = document.getElementById('answerDetails');
+            detailsContainer.innerHTML = answers.map((a, i) => `
+                <div class="flex items-center justify-between p-4 rounded-lg ${a.isCorrect ? 'bg-green-50' : 'bg-red-50'}">
+                    <div class="flex items-center space-x-4">
+                        <div class="text-2xl font-bold text-gray-400">${i + 1}</div>
+                        <div class="text-xl font-bold text-gray-800">
+                            ${a.multiplier1} × ${a.multiplier2} = ?
+                        </div>
+                    </div>
+                    <div class="flex items-center space-x-4">
+                        <div class="text-right">
+                            <div class="font-bold ${a.isCorrect ? 'text-green-600' : 'text-red-600'}">
+                                你的答案：${a.userAnswer}
+                            </div>
+                            ${!a.isCorrect ? `<div class="text-sm text-gray-500">正确答案：${a.correctAnswer}</div>` : ''}
+                        </div>
+                        <div class="text-sm text-gray-500">${a.timeSpent.toFixed(1)}s</div>
+                        <div class="text-2xl">${a.isCorrect ? '✅' : '❌'}</div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // ============================================
+        // 初始化
+        // ============================================
+        window.onerror = function (msg, url, lineNo, columnNo, error) {
+            console.error('全局错误:', msg, url, lineNo, columnNo, error);
+            return false;
+        };
+
+        /**
+         * 初始化欢迎页面的排行榜
+         */
+        async function initWelcomeLeaderboard() {
+            const container = document.getElementById('welcomeLeaderboard');
+
+            if (TEST_MODE || !supabaseClient) {
+                container.innerHTML = `
+                    <div class="text-center text-gray-400 py-8">
+                        <div class="text-4xl mb-2">🧪</div>
+                        <p class="font-medium">测试模式</p>
+                        <p class="text-sm mt-1">排行榜功能已禁用</p>
+                    </div>
+                `;
+                return;
+            }
+
+            try {
+                const { data, error } = await supabaseClient
+                    .from('leaderboard_view')
+                    .select('*')
+                    .order('rank_position', { ascending: true })
+                    .limit(10);
+
+                if (error) throw error;
+
+                if (!data || data.length === 0) {
+                    container.innerHTML = `
+                        <div class="text-center text-gray-400 py-8">
+                            <div class="text-4xl mb-2">📊</div>
+                            <p>暂无数据</p>
+                            <p class="text-sm mt-1">成为第一个挑战者吧！</p>
+                        </div>
+                    `;
+                    return;
+                }
+
+                container.innerHTML = data.map((item, index) => {
+                    const rankEmoji = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `${item.rank_position}.`;
+
+                    return `
+                        <div class="flex items-center justify-between p-3 rounded-lg bg-gray-50 transition hover:bg-gray-100">
+                            <div class="flex items-center space-x-3">
+                                <span class="text-xl font-bold ${index < 3 ? '' : 'text-gray-600'}">${rankEmoji}</span>
+                                <span class="font-medium text-gray-800">${item.name}</span>
+                            </div>
+                            <div class="text-right">
+                                <div class="font-bold text-gray-800">${item.accuracy}%</div>
+                                <div class="text-sm text-gray-500">${item.total_time}s</div>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            } catch (error) {
+                console.error('加载排行榜失败:', error);
+                container.innerHTML = `
+                    <div class="text-center text-gray-400 py-8">
+                        <div class="text-4xl mb-2">⚠️</div>
+                        <p>加载失败</p>
+                        <p class="text-sm mt-1">请刷新页面重试</p>
+                    </div>
+                `;
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log('页面加载完成');
+            console.log('测试模式:', TEST_MODE);
+            console.log('Supabase 客户端:', supabaseClient ? '已初始化' : '未初始化');
+
+            const userNameInput = document.getElementById('userName');
+            if (userNameInput) {
+                userNameInput.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') {
+                        console.log('按下回车键');
+                        startQuiz();
+                    }
+                });
+                console.log('输入框事件监听器已绑定');
+            } else {
+                console.error('找不到用户名输入框');
+            }
+
+            const startButton = document.getElementById('startButton');
+            if (startButton) {
+                console.log('开始按钮已找到');
+            } else {
+                console.error('找不到开始按钮');
+            }
+
+            initWelcomeLeaderboard();
+        });
+    </script>
+</body>
+
+</html>
